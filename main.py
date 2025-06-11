@@ -8,7 +8,11 @@ from telegram import Bot
 # Налаштування
 BITRIX_URL = os.environ.get("BITRIX_WEBHOOK_URL")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+BOT_TOKEN_REPORT = os.environ.get("TELEGRAM_BOT_TOKEN_REPORT")
 RESPONSIBLE_ID = 596
+
+# Chat IDs для відправки звітів
+REPORT_CHAT_IDS = [727013047, 718885452, 6775209607, 1139941966, 332270956]
 
 # Етапи діалогу
 (SELECTING_DEPARTMENT, ENTER_EMPLOYEE_NAME, ENTER_CLIENT_NAME,
@@ -68,7 +72,7 @@ def handle_employee_name(update: Update, context: CallbackContext):
 def handle_client_name(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
     user_data_temp[chat_id]["client_name"] = update.message.text
-    update.message.reply_text("☎️Як вам зручно отримати зворотній зв’язок? (Телефон, Telegram, Email):")
+    update.message.reply_text("☎️Як вам зручно отримати зворотній зв'язок? (Телефон, Telegram, Email):")
     return ENTER_CONTACT_METHOD
 
 def handle_contact_method(update: Update, context: CallbackContext):
@@ -76,6 +80,29 @@ def handle_contact_method(update: Update, context: CallbackContext):
     user_data_temp[chat_id]["contact_method"] = update.message.text
     update.message.reply_text("🎤Опишіть, будь ласка, вашу скаргу:")
     return ENTER_COMPLAINT
+
+def send_report_message(data):
+    try:
+        # Створюємо новий екземпляр бота для відправки повідомлень
+        report_bot = Bot(token=BOT_TOKEN_REPORT)
+        
+        report_message = (
+            f"🔔 Нова скарга!\n\n"
+            f"📌 Суть скарги:\n{data['complaint_text']}\n\n"
+            f"👤 Співробітник: {data['employee_name']}\n"
+            f"🙍‍♂️ Клієнт: {data['client_name']}\n"
+            f"📬 Зв'язок: {data['contact_method']}\n"
+            f"🔗 Telegram Username: {data['telegram_username']}\n"
+            f"🏢 Відділ: {data['department']}"
+        )
+        
+        for report_chat_id in REPORT_CHAT_IDS:
+            try:
+                report_bot.send_message(chat_id=report_chat_id, text=report_message)
+            except Exception as e:
+                print(f"Помилка відправки повідомлення в чат {report_chat_id}: {e}")
+    except Exception as e:
+        print(f"Помилка при створенні бота для звітів: {e}")
 
 def handle_complaint(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
@@ -87,7 +114,7 @@ def handle_complaint(update: Update, context: CallbackContext):
         f"📌 Суть скарги:\n{data['complaint_text']}\n\n"
         f"👤 Співробітник: {data['employee_name']}\n"
         f"🙍‍♂️ Клієнт: {data['client_name']}\n"
-        f"📬 Зв’язок: {data['contact_method']}\n"
+        f"📬 Зв'язок: {data['contact_method']}\n"
         f"🔗 Telegram Username: {data['telegram_username']}"
     )
 
@@ -106,6 +133,10 @@ def handle_complaint(update: Update, context: CallbackContext):
     }
 
     response = requests.post(BITRIX_URL, json=payload)
+    
+    # Відправка повідомлення в бот для звітів
+    send_report_message(data)
+
     if response.status_code == 200 and "result" in response.json():
         update.message.reply_text('Ваша скарга прийнята та вже передана на опрацювання нашій команді.✅\nМи зробимо все можливе, щоб знайти рішення якнайшвидше.🔍\nДякуємо за вашу довіру, очікуйте зворотного зв\'язку.❤️⏳ ')
     else:
